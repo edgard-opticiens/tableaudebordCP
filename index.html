@@ -50,8 +50,7 @@ tr:hover td{background:var(--lt)}
   <select id="fStatut" onchange="render()">
     <option value="">Tous statuts</option>
     <option value="en_attente">En attente signature</option>
-    <option value="attente_telechargement">Attente téléchargement</option>
-    <option value="telecharge">Téléchargé</option>
+    <option value="valide">Validé</option>
     <option value="refuse">Refusé</option>
   </select>
   <input type="text" id="fSearch" placeholder="Rechercher un nom..." oninput="render()">
@@ -78,8 +77,7 @@ function etapeLabel(e){
   return {collab:'Collaborateur',responsable:'Responsable',direction:'Direction',rh:'RH',termine:'Terminé'}[e]||e;
 }
 function statutBadge(s){
-  if(s==='telecharge')return '<span class="badge b-valide">Téléchargé ✓</span>';
-  if(s==='attente_telechargement')return '<span class="badge" style="background:#E8EAF6;color:#3949AB">Attente téléchargement</span>';
+  if(s==='valide')return '<span class="badge b-valide">Validé ✓</span>';
   if(s==='refuse')return '<span class="badge b-refuse">Refusé</span>';
   return '<span class="badge b-attente">En attente</span>';
 }
@@ -109,14 +107,12 @@ function render(){
 
   // Stats
   var nAttente=DATA.filter(function(d){return d.statut==='en_attente'}).length;
-  var nValide=DATA.filter(function(d){return d.statut==='telecharge'}).length;
-  var nAttTel=DATA.filter(function(d){return d.statut==='attente_telechargement'}).length;
+  var nValide=DATA.filter(function(d){return d.statut==='valide'}).length;
   var nRetard=DATA.filter(function(d){return d.statut==='en_attente'&&isLate(d.date_derniere_action)}).length;
   document.getElementById('stats').innerHTML=
     '<div class="stat" style="border-color:#E67E22"><div class="n">'+nAttente+'</div><div class="l">En attente signature</div></div>'+
-    '<div class="stat" style="border-color:#3949AB"><div class="n">'+nAttTel+'</div><div class="l">Attente téléchargement</div></div>'+
     '<div class="stat" style="border-color:#C0392B"><div class="n">'+nRetard+'</div><div class="l">En retard (+48h)</div></div>'+
-    '<div class="stat" style="border-color:#27AE60"><div class="n">'+nValide+'</div><div class="l">Téléchargées</div></div>'+
+    '<div class="stat" style="border-color:#27AE60"><div class="n">'+nValide+'</div><div class="l">Validées</div></div>'+
     '<div class="stat" style="border-color:#C9A84C"><div class="n">'+DATA.length+'</div><div class="l">Total demandes</div></div>';
 
   var tbody=document.getElementById('rows');
