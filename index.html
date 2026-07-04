@@ -87,8 +87,14 @@ function isLate(dateStr){
   return diff>=48;
 }
 function fmtDate(d){
-  if(!d)return'-';
-  var dt=new Date(d);
+  if(!d&&d!==0)return'-';
+  var dt;
+  if(typeof d==='number'||/^\d+(\.\d+)?$/.test(d)){
+    // Numéro de série Excel (jours depuis 1899-12-30)
+    dt=new Date((Number(d)-25569)*86400000);
+  }else{
+    dt=new Date(d);
+  }
   if(isNaN(dt))return d;
   return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
