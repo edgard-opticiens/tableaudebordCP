@@ -31,6 +31,9 @@ tr:hover td{background:var(--lt)}
 .b-refuse{background:#FDEDEC;color:var(--red)}
 .retard{color:var(--red);font-weight:700}
 .empty{max-width:1100px;margin:40px auto;text-align:center;color:var(--md);font-size:13px}
+.view-tabs{max-width:1100px;margin:0 auto 16px;display:flex;gap:8px}
+.view-tab{background:#fff;border:1.5px solid var(--bd);color:var(--md);padding:8px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.view-tab.active{background:var(--dk);color:#fff;border-color:var(--dk)}
 </style>
 </head>
 <body>
@@ -41,6 +44,11 @@ tr:hover td{background:var(--lt)}
     <div class="sub" id="lastUpdate">Chargement...</div>
   </div>
   <button class="refresh" onclick="load()">↻ Actualiser</button>
+</div>
+
+<div class="view-tabs">
+  <button class="view-tab active" id="tabActives" onclick="switchView('actives')">📋 Demandes actives</button>
+  <button class="view-tab" id="tabHisto" onclick="switchView('histo')">🗂 Historique complet</button>
 </div>
 
 <div class="stats" id="stats"></div>
@@ -72,6 +80,22 @@ tr:hover td{background:var(--lt)}
 var N8N_URL = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-demandes';
 
 var DATA = [];
+var ARCHIVE = [];
+var VIEW = 'actives';
+
+function switchView(v){
+  VIEW=v;
+  document.getElementById('tabActives').classList.toggle('active',v==='actives');
+  document.getElementById('tabHisto').classList.toggle('active',v==='histo');
+  render();
+}
+
+function currentSet(){
+  if(VIEW==='actives')return DATA;
+  // Historique : demandes terminées encore dans Suivi + tout l'archive, dédupliqué par id
+  var termineActives=DATA.filter(function(d){return d.etape==='termine';});
+  return dedupeLatest(termineActives.concat(ARCHIVE));
+}
 
 function etapeLabel(e){
   return {collab:'Collaborateur',responsable:'Responsable',direction:'Direction',rh:'RH',termine:'Terminé'}[e]||e;
@@ -103,23 +127,24 @@ function render(){
   var soc=document.getElementById('fSoc').value;
   var statut=document.getElementById('fStatut').value;
   var search=document.getElementById('fSearch').value.toLowerCase();
+  var source=currentSet();
 
-  var filtered=DATA.filter(function(d){
+  var filtered=source.filter(function(d){
     if(soc&&d.societe!==soc)return false;
     if(statut&&d.statut!==statut)return false;
     if(search&&!((d.nom||'')+' '+(d.prenom||'')).toLowerCase().includes(search))return false;
     return true;
   });
 
-  // Stats
+  // Stats (toujours calculées sur les demandes actives, pas l'historique)
   var nAttente=DATA.filter(function(d){return d.statut==='en_attente'}).length;
   var nValide=DATA.filter(function(d){return d.statut==='valide'}).length;
   var nRetard=DATA.filter(function(d){return d.statut==='en_attente'&&isLate(d.date_derniere_action)}).length;
   document.getElementById('stats').innerHTML=
     '<div class="stat" style="border-color:#E67E22"><div class="n">'+nAttente+'</div><div class="l">En attente signature</div></div>'+
     '<div class="stat" style="border-color:#C0392B"><div class="n">'+nRetard+'</div><div class="l">En retard (+48h)</div></div>'+
-    '<div class="stat" style="border-color:#27AE60"><div class="n">'+nValide+'</div><div class="l">Validées</div></div>'+
-    '<div class="stat" style="border-color:#C9A84C"><div class="n">'+DATA.length+'</div><div class="l">Total demandes</div></div>';
+    '<div class="stat" style="border-color:#27AE60"><div class="n">'+(VIEW==='actives'?nValide:source.length)+'</div><div class="l">'+(VIEW==='actives'?'Validées':'Historique total')+'</div></div>'+
+    '<div class="stat" style="border-color:#C9A84C"><div class="n">'+DATA.length+'</div><div class="l">Total demandes actives</div></div>';
 
   var tbody=document.getElementById('rows');
   if(!filtered.length){
@@ -164,11 +189,13 @@ function load(){
     .then(function(r){return r.json();})
     .then(function(data){
       var raw=Array.isArray(data)?data:(data.data||[]);
+      var rawArchive=Array.isArray(data)?[]:(data.archive||[]);
       DATA=dedupeLatest(raw);
-      var socs=[...new Set(DATA.map(function(d){return d.societe;}).filter(Boolean))].sort();
+      ARCHIVE=dedupeLatest(rawArchive);
+      var socs=[...new Set(DATA.concat(ARCHIVE).map(function(d){return d.societe;}).filter(Boolean))].sort();
       var sel=document.getElementById('fSoc');
       sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
-      document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR')+' ('+raw.length+' lignes, '+DATA.length+' demandes)';
+      document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR')+' ('+raw.length+' lignes, '+DATA.length+' demandes actives, '+ARCHIVE.length+' archivées)';
       render();
     })
     .catch(function(e){
