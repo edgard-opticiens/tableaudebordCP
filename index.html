@@ -91,7 +91,7 @@ function switchView(v){
 }
 
 function currentSet(){
-  if(VIEW==='actives')return DATA;
+  if(VIEW==='actives')return DATA.filter(function(d){return d.etape!=='termine';});
   // Historique : demandes terminées encore dans Suivi + tout l'archive, dédupliqué par id
   var termineActives=DATA.filter(function(d){return d.etape==='termine';});
   return dedupeLatest(termineActives.concat(ARCHIVE));
@@ -136,15 +136,20 @@ function render(){
     return true;
   });
 
-  // Stats (toujours calculées sur les demandes actives, pas l'historique)
-  var nAttente=DATA.filter(function(d){return d.statut==='en_attente'}).length;
-  var nValide=DATA.filter(function(d){return d.statut==='valide'}).length;
-  var nRetard=DATA.filter(function(d){return d.statut==='en_attente'&&isLate(d.date_derniere_action)}).length;
-  document.getElementById('stats').innerHTML=
-    '<div class="stat" style="border-color:#E67E22"><div class="n">'+nAttente+'</div><div class="l">En attente signature</div></div>'+
-    '<div class="stat" style="border-color:#C0392B"><div class="n">'+nRetard+'</div><div class="l">En retard (+48h)</div></div>'+
-    '<div class="stat" style="border-color:#27AE60"><div class="n">'+(VIEW==='actives'?nValide:source.length)+'</div><div class="l">'+(VIEW==='actives'?'Validées':'Historique total')+'</div></div>'+
-    '<div class="stat" style="border-color:#C9A84C"><div class="n">'+DATA.length+'</div><div class="l">Total demandes actives</div></div>';
+  // Stats
+  var activeOnly=DATA.filter(function(d){return d.etape!=='termine';});
+  var nAttente=activeOnly.filter(function(d){return d.statut==='en_attente'}).length;
+  var nRetard=activeOnly.filter(function(d){return d.statut==='en_attente'&&isLate(d.date_derniere_action)}).length;
+  if(VIEW==='actives'){
+    document.getElementById('stats').innerHTML=
+      '<div class="stat" style="border-color:#E67E22"><div class="n">'+nAttente+'</div><div class="l">En attente signature</div></div>'+
+      '<div class="stat" style="border-color:#C0392B"><div class="n">'+nRetard+'</div><div class="l">En retard (+48h)</div></div>'+
+      '<div class="stat" style="border-color:#C9A84C"><div class="n">'+activeOnly.length+'</div><div class="l">Total demandes actives</div></div>';
+  } else {
+    document.getElementById('stats').innerHTML=
+      '<div class="stat" style="border-color:#27AE60"><div class="n">'+source.length+'</div><div class="l">Total historique</div></div>'+
+      '<div class="stat" style="border-color:#C9A84C"><div class="n">'+ARCHIVE.length+'</div><div class="l">Dont archivées</div></div>';
+  }
 
   var tbody=document.getElementById('rows');
   if(!filtered.length){
