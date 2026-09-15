@@ -180,7 +180,8 @@ function fmtDate(d){
 }
 
 function render(){
-  var soc=document.getElementById('fSoc').value;
+  var fSocEl=document.getElementById('fSoc');
+  var soc=fSocEl?fSocEl.value:'';
   var statut=document.getElementById('fStatut').value;
   var search=document.getElementById('fSearch').value.toLowerCase();
   var source=currentSet();
