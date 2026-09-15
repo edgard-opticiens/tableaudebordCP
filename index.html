@@ -46,6 +46,19 @@ tr:hover td{background:var(--lt)}
   <button class="refresh" onclick="load()">↻ Actualiser</button>
 </div>
 
+<div id="gate" style="display:none;position:fixed;inset:0;background:#F2EFE8;z-index:50;display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.12);max-width:360px;width:100%;padding:30px 26px;text-align:center">
+    <div style="font-family:'Playfair Display',serif;font-size:19px;margin-bottom:4px">Espace directeur</div>
+    <div style="font-size:12.5px;color:#666;margin-bottom:18px">Sélectionnez votre magasin et saisissez votre code directeur</div>
+    <select id="gateSoc" style="width:100%;padding:10px;border:1.5px solid #E0DCD0;border-radius:6px;margin-bottom:10px;font-size:13px"><option value="">— Choisir un magasin —</option></select>
+    <input type="password" id="gatePin" placeholder="Code directeur" style="width:100%;padding:10px;border:1.5px solid #E0DCD0;border-radius:6px;text-align:center;letter-spacing:.2em;font-size:15px;margin-bottom:10px" maxlength="6">
+    <button onclick="tryGate()" style="width:100%;padding:11px;background:#1A1A1A;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">Accéder</button>
+    <div id="gateErr" style="color:#C0392B;font-size:12px;margin-top:10px;min-height:16px"></div>
+  </div>
+</div>
+
+<div id="app" style="display:block">
+
 <div class="view-tabs">
   <button class="view-tab active" id="tabActives" onclick="switchView('actives')">📋 Demandes actives</button>
   <button class="view-tab" id="tabHisto" onclick="switchView('histo')">🗂 Historique complet</button>
@@ -75,9 +88,52 @@ tr:hover td{background:var(--lt)}
 </table>
 <div class="empty" id="empty" style="display:none">Aucune demande trouvée.</div>
 
+</div>
+
 <script>
 // ⚠️ Remplacer par l'URL de votre webhook n8n "get-demandes"
 var N8N_URL = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-demandes';
+
+// Memes codes que l'Espace directeur des portails Edgard et GdO
+var CODES_DIRECTEUR = {
+  "ANGO":"vv2ex3","BIARRO":"t5xaaa","BORDO":"ykubz3","CAENPO":"3cv3y9","GIRO":"yampws",
+  "HAVRO":"x663ra","JISAM":"8522mv","LYONO":"dtqhpr","MANSO":"2ar48z","MARSEILLO":"e8smvp",
+  "NANCEO":"253ruj","NANTO":"jy8bb8","NICEO":"s6w62v","ORLO":"8ty2t3","REIMO":"9demwu",
+  "STRABO":"z4jx7z","TURO":"c33acr",
+  "CHATO":"uuqjua","CHEMILLO":"qo6ut6","CHOLO":"5hrwdv","DUNES":"j7igxx","ECUME":"kdctla",
+  "FORMIO":"s4t20v","MARAIS":"ljcs5u","MUDO":"oses5i","NIORTO":"eoro9o"
+};
+
+function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase(); }
+
+var MODE_DIRECTEUR = new URLSearchParams(location.search).get('directeur') === '1';
+var LOCKED_SOCIETE = null; // code magasin normalise, une fois authentifie
+
+function initGate(){
+  var sel = document.getElementById('gateSoc');
+  Object.keys(CODES_DIRECTEUR).sort().forEach(function(code){
+    var o = document.createElement('option');
+    o.value = code; o.textContent = code;
+    sel.appendChild(o);
+  });
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function tryGate(){
+  var soc = document.getElementById('gateSoc').value;
+  var pin = document.getElementById('gatePin').value.trim();
+  var err = document.getElementById('gateErr');
+  if(!soc){ err.textContent = 'Choisissez votre magasin.'; return; }
+  if(!CODES_DIRECTEUR[soc] || CODES_DIRECTEUR[soc] !== pin){
+    err.textContent = 'Code incorrect.'; document.getElementById('gatePin').value=''; return;
+  }
+  LOCKED_SOCIETE = soc;
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  load();
+  setInterval(load,60000);
+}
 
 var DATA = [];
 var ARCHIVE = [];
@@ -130,14 +186,15 @@ function render(){
   var source=currentSet();
 
   var filtered=source.filter(function(d){
-    if(soc&&d.societe!==soc)return false;
+    if(LOCKED_SOCIETE){ if(normSoc(d.societe)!==LOCKED_SOCIETE) return false; }
+    else if(soc&&d.societe!==soc){ return false; }
     if(statut&&d.statut!==statut)return false;
     if(search&&!((d.nom||'')+' '+(d.prenom||'')).toLowerCase().includes(search))return false;
     return true;
   });
 
   // Stats
-  var activeOnly=DATA.filter(function(d){return d.etape!=='termine';});
+  var activeOnly=DATA.filter(function(d){return d.etape!=='termine';}).filter(function(d){return !LOCKED_SOCIETE || normSoc(d.societe)===LOCKED_SOCIETE;});
   var nAttente=activeOnly.filter(function(d){return d.statut==='en_attente'}).length;
   var nRetard=activeOnly.filter(function(d){return d.statut==='en_attente'&&isLate(d.date_derniere_action)}).length;
   if(VIEW==='actives'){
@@ -146,9 +203,11 @@ function render(){
       '<div class="stat" style="border-color:#C0392B"><div class="n">'+nRetard+'</div><div class="l">En retard (+48h)</div></div>'+
       '<div class="stat" style="border-color:#C9A84C"><div class="n">'+activeOnly.length+'</div><div class="l">Total demandes actives</div></div>';
   } else {
+    var sourceScoped = LOCKED_SOCIETE ? source.filter(function(d){return normSoc(d.societe)===LOCKED_SOCIETE;}) : source;
+    var archiveScoped = LOCKED_SOCIETE ? ARCHIVE.filter(function(d){return normSoc(d.societe)===LOCKED_SOCIETE;}) : ARCHIVE;
     document.getElementById('stats').innerHTML=
-      '<div class="stat" style="border-color:#27AE60"><div class="n">'+source.length+'</div><div class="l">Total historique</div></div>'+
-      '<div class="stat" style="border-color:#C9A84C"><div class="n">'+ARCHIVE.length+'</div><div class="l">Dont archivées</div></div>';
+      '<div class="stat" style="border-color:#27AE60"><div class="n">'+sourceScoped.length+'</div><div class="l">Total historique</div></div>'+
+      '<div class="stat" style="border-color:#C9A84C"><div class="n">'+archiveScoped.length+'</div><div class="l">Dont archivées</div></div>';
   }
 
   var tbody=document.getElementById('rows');
@@ -197,9 +256,14 @@ function load(){
       var rawArchive=Array.isArray(data)?[]:(data.archive||[]);
       DATA=dedupeLatest(raw);
       ARCHIVE=dedupeLatest(rawArchive);
-      var socs=[...new Set(DATA.concat(ARCHIVE).map(function(d){return d.societe;}).filter(Boolean))].sort();
-      var sel=document.getElementById('fSoc');
-      sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+      if(LOCKED_SOCIETE){
+        var socSel = document.getElementById('fSoc');
+        if(socSel) socSel.parentNode.removeChild(socSel);
+      } else {
+        var socs=[...new Set(DATA.concat(ARCHIVE).map(function(d){return d.societe;}).filter(Boolean))].sort();
+        var sel=document.getElementById('fSoc');
+        sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+      }
       document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR')+' ('+raw.length+' lignes, '+DATA.length+' demandes actives, '+ARCHIVE.length+' archivées)';
       render();
     })
@@ -209,8 +273,12 @@ function load(){
     });
 }
 
-load();
-setInterval(load,60000); // auto-refresh toutes les 60s
+if(MODE_DIRECTEUR){
+  initGate();
+} else {
+  load();
+  setInterval(load,60000); // auto-refresh toutes les 60s
+}
 </script>
 </body>
 </html>
