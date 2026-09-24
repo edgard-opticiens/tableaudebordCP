@@ -34,6 +34,10 @@ tr:hover td{background:var(--lt)}
 .view-tabs{max-width:1100px;margin:0 auto 16px;display:flex;gap:8px}
 .view-tab{background:#fff;border:1.5px solid var(--bd);color:var(--md);padding:8px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
 .view-tab.active{background:var(--dk);color:#fff;border-color:var(--dk)}
+.btn-sign{display:inline-block;background:var(--green);color:#fff;text-decoration:none;font-size:11px;font-weight:700;padding:5px 11px;border-radius:5px;white-space:nowrap}
+.btn-sign:hover{background:#1e8449}
+.btn-view{display:inline-block;background:#fff;color:var(--blue);border:1.3px solid var(--blue);text-decoration:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:5px;white-space:nowrap}
+.btn-view:hover{background:#EAF2F8}
 </style>
 </head>
 <body>
@@ -81,7 +85,7 @@ tr:hover td{background:var(--lt)}
   <thead>
     <tr>
       <th>Collaborateur</th><th>Société</th><th>Type</th><th>Dates</th>
-      <th>Étape</th><th>En attente de</th><th>Statut</th><th>Dernière action</th>
+      <th>Étape</th><th>En attente de</th><th>Statut</th><th>Dernière action</th><th>Action</th>
     </tr>
   </thead>
   <tbody id="rows"></tbody>
@@ -154,7 +158,20 @@ function currentSet(){
 }
 
 function etapeLabel(e){
-  return {collab:'Collaborateur',responsable:'Responsable',direction:'Direction',rh:'RH',termine:'Terminé'}[e]||e;
+  return {collab:'Collaborateur',responsable:'Responsable',direction:'Direction',directeur:'Directeur',rh:'RH',termine:'Terminé'}[e]||e;
+}
+function actionCell(d){
+  if(d.statut!=='en_attente'||!d.lien)return '-';
+  if(d.etape==='directeur'){
+    // Lien de signature — pouvoir donné uniquement dans l'espace directeur (déjà protégé par code, verrouillé sur sa société)
+    if(LOCKED_SOCIETE) return '<a class="btn-sign" href="'+d.lien+'" target="_blank" rel="noopener">✍️ Signer</a>';
+    return '<span style="color:var(--md);font-size:11px">En attente directeur</span>';
+  }
+  if(d.etape==='rh'){
+    // Lien de consultation (lecture seule, téléchargement PDF) — sans risque à afficher côté RH
+    return '<a class="btn-view" href="'+d.lien+'" target="_blank" rel="noopener">📄 Consulter</a>';
+  }
+  return '-';
 }
 function statutBadge(s){
   if(s==='valide')return '<span class="badge b-valide">Validé ✓</span>';
@@ -219,11 +236,17 @@ function render(){
   }
   document.getElementById('empty').style.display='none';
 
-  filtered.sort(function(a,b){return new Date(b.date_derniere_action)-new Date(a.date_derniere_action);});
+  function isActionable(d){return LOCKED_SOCIETE&&d.etape==='directeur'&&d.statut==='en_attente'&&d.lien;}
+  filtered.sort(function(a,b){
+    var pa=isActionable(a)?1:0, pb=isActionable(b)?1:0;
+    if(pa!==pb)return pb-pa;
+    return new Date(b.date_derniere_action)-new Date(a.date_derniere_action);
+  });
 
   tbody.innerHTML=filtered.map(function(d){
     var late=d.statut==='en_attente'&&isLate(d.date_derniere_action);
-    return '<tr>'+
+    var rowStyle=isActionable(d)?' style="background:#FFFBEA"':'';
+    return '<tr'+rowStyle+'>'+
       '<td><strong>'+(d.prenom||'')+' '+(d.nom||'')+'</strong></td>'+
       '<td>'+(d.societe||'-')+'</td>'+
       '<td>'+(d.type||'-')+'</td>'+
@@ -232,6 +255,7 @@ function render(){
       '<td>'+(d.en_attente_nom||'-')+'</td>'+
       '<td>'+statutBadge(d.statut)+'</td>'+
       '<td class="'+(late?'retard':'')+'">'+fmtDate(d.date_derniere_action)+(late?' ⚠️':'')+'</td>'+
+      '<td>'+actionCell(d)+'</td>'+
     '</tr>';
   }).join('');
 }
