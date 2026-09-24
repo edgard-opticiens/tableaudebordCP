@@ -124,8 +124,8 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
   <div class="li"><span class="sw cp-attente"></span> Congé payé en attente</div>
   <div class="li"><span class="sw abs-valide"></span> Absence validée</div>
   <div class="li"><span class="sw abs-attente"></span> Absence en attente</div>
-  <div class="li"><span class="sw st-valide"></span> Samedi tournant validé</div>
-  <div class="li"><span class="sw st-attente"></span> Samedi tournant en attente</div>
+  <div class="li gdo-hide-st"><span class="sw st-valide"></span> Samedi tournant validé</div>
+  <div class="li gdo-hide-st"><span class="sw st-attente"></span> Samedi tournant en attente</div>
 </div>
 
 <div class="stats" id="stats"></div>
@@ -159,18 +159,23 @@ var N8N_SAMEDIS  = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-samedis-t
 
 // Memes codes que l'Espace directeur du portail (Edgard + GdO — les samedis tournants
 // ne concernent que les magasins Edgard, mais le calendrier reste accessible partout pour les congés)
-var CODES_DIRECTEUR = {
+var CODES_DIRECTEUR_EDGARD = {
   "ANGO":"vv2ex3","BIARRO":"t5xaaa","BORDO":"ykubz3","CAENPO":"3cv3y9","GIRO":"yampws",
   "HAVRO":"x663ra","JISAM":"8522mv","LYONO":"dtqhpr","MANSO":"2ar48z","MARSEILLO":"e8smvp",
   "NANCEO":"253ruj","NANTO":"jy8bb8","NICEO":"s6w62v","ORLO":"8ty2t3","REIMO":"9demwu",
-  "STRABO":"z4jx7z","TURO":"c33acr",
+  "STRABO":"z4jx7z","TURO":"c33acr"
+};
+var CODES_DIRECTEUR_GDO = {
   "CHATO":"uuqjua","CHEMILLO":"qo6ut6","CHOLO":"5hrwdv","DUNES":"j7igxx","ECUME":"kdctla",
   "FORMIO":"s4t20v","MARAIS":"ljcs5u","MUDO":"oses5i","NIORTO":"eoro9o"
 };
+var CODES_DIRECTEUR = Object.assign({}, CODES_DIRECTEUR_EDGARD, CODES_DIRECTEUR_GDO);
 
 function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase(); }
+function isGdo(soc){ return Object.prototype.hasOwnProperty.call(CODES_DIRECTEUR_GDO, soc); }
 
 var LOCKED_SOCIETE = null;
+var IS_GDO = false;
 
 function initGate(){
   var sel = document.getElementById('gateSoc');
@@ -189,9 +194,13 @@ function tryGate(){
     err.textContent = 'Code incorrect.'; document.getElementById('gatePin').value=''; return;
   }
   LOCKED_SOCIETE = soc;
+  IS_GDO = isGdo(soc);
   document.getElementById('dirMagasin').textContent = soc;
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  if(IS_GDO){
+    Array.prototype.forEach.call(document.querySelectorAll('.gdo-hide-st'), function(el){ el.style.display = 'none'; });
+  }
   load();
   setInterval(load, 300000);
 }
@@ -319,7 +328,7 @@ function render(){
     '<div class="stat" style="border-color:#27AE60"><div class="n">'+totalCpDays+'</div><div class="l">Jours de CP cumulés</div></div>'+
     '<div class="stat" style="border-color:#E67E22"><div class="n">'+Object.keys(uniqAbs).length+'</div><div class="l">Collaborateurs en absence ce mois</div></div>'+
     '<div class="stat" style="border-color:#E67E22"><div class="n">'+totalAbsDays+'</div><div class="l">Jours d\'absence cumulés</div></div>'+
-    '<div class="stat" style="border-color:#2980B9"><div class="n">'+totalSt+'</div><div class="l">Samedis tournants ce mois</div></div>';
+    (IS_GDO ? '' : '<div class="stat" style="border-color:#2980B9"><div class="n">'+totalSt+'</div><div class="l">Samedis tournants ce mois</div></div>');
 
   // Grille
   var year = CUR.getFullYear(), month = CUR.getMonth();
@@ -372,7 +381,7 @@ function load(){
   document.getElementById('lastUpdate').textContent='Chargement...';
   Promise.all([
     fetch(N8N_DEMANDES).then(function(r){return r.json();}).catch(function(){return {data:[],archive:[]};}),
-    fetch(N8N_SAMEDIS).then(function(r){return r.json();}).catch(function(){return {data:[]};})
+    IS_GDO ? Promise.resolve({data:[]}) : fetch(N8N_SAMEDIS).then(function(r){return r.json();}).catch(function(){return {data:[]};})
   ]).then(function(results){
     var rawDemandes = Array.isArray(results[0]) ? results[0] : (results[0].data||[]);
     var rawArchive = Array.isArray(results[0]) ? [] : (results[0].archive||[]);
