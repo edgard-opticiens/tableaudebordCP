@@ -221,6 +221,7 @@ function excelOrIsoDate(v){
   return isNaN(d)?null:d;
 }
 function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function localMidnight(dt){ return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); }
 function isAbsType(type){ return /ABS/.test((type||'').toString().toUpperCase()); }
 function shortName(prenom,nom){
   prenom = (prenom||'').trim(); nom = (nom||'').trim();
@@ -261,12 +262,12 @@ function buildMonthMap(){
   CONGES.forEach(function(c){
     if(!c.debut) return;
     var fin = c.fin || c.debut;
-    if(fin < monthStart || c.debut > monthEnd) return;
+    if(localMidnight(fin) < monthStart || localMidnight(c.debut) > monthEnd) return;
     var label = shortName(c.prenom, c.nom);
     if(search && !((c.nom||'')+' '+(c.prenom||'')).toLowerCase().includes(search)) return;
     var cat = isAbsType(c.type) ? 'abs' : 'cp';
-    var d = new Date(Math.max(c.debut, monthStart));
-    var last = new Date(Math.min(fin, monthEnd));
+    var d = localMidnight(new Date(Math.max(c.debut, monthStart)));
+    var last = localMidnight(new Date(Math.min(fin, monthEnd)));
     while(d<=last){
       var k = dkey(d);
       var bucket = ensure(k);
@@ -278,7 +279,7 @@ function buildMonthMap(){
 
   SAMEDIS.forEach(function(s){
     if(!s.date) return;
-    if(s.date < monthStart || s.date > monthEnd) return;
+    if(localMidnight(s.date) < monthStart || localMidnight(s.date) > monthEnd) return;
     if(search && !((s.nom||'')+' '+(s.prenom||'')).toLowerCase().includes(search)) return;
     var k = dkey(s.date);
     var bucket = ensure(k);
