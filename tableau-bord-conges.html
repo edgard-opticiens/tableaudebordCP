@@ -34,6 +34,26 @@ tr:hover td{background:var(--lt)}
 .view-tabs{max-width:1100px;margin:0 auto 16px;display:flex;gap:8px}
 .view-tab{background:#fff;border:1.5px solid var(--bd);color:var(--md);padding:8px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
 .view-tab.active{background:var(--dk);color:#fff;border-color:var(--dk)}
+.addBtn{background:#fff;color:var(--dk);border:1.5px solid var(--dk);padding:9px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.addBtn:hover{background:var(--lt)}
+.hdrBtns{display:flex;gap:8px;flex-wrap:wrap}
+.modal{display:none;position:fixed;inset:0;background:rgba(26,26,26,.55);z-index:50;align-items:flex-start;justify-content:center;padding:40px 14px;overflow-y:auto}
+.modal.show{display:flex}
+.modalBox{background:#fff;border-radius:12px;max-width:460px;width:100%;padding:26px 24px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.modalBox h2{font-family:'Playfair Display',serif;font-size:18px;margin-bottom:6px}
+.modalBox .note{font-size:11.5px;color:var(--md);margin-bottom:18px;line-height:1.5}
+.formRow{margin-bottom:12px}
+.formRow label{display:block;font-size:11px;font-weight:600;color:var(--md);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.formRow input,.formRow select{width:100%;border:1.5px solid var(--bd);border-radius:6px;padding:8px 10px;font-size:13px;font-family:'DM Sans',sans-serif;background:#fff}
+.formRow2{display:flex;gap:10px}
+.formRow2 .formRow{flex:1}
+.modalBtns{display:flex;gap:10px;margin-top:18px;justify-content:flex-end}
+.btnCancel{background:#fff;border:1.5px solid var(--bd);color:var(--md);padding:9px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.btnSave{background:var(--dk);border:none;color:#fff;padding:9px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.btnSave:disabled{opacity:.5;cursor:default}
+.formErr{color:var(--red);font-size:11.5px;margin-top:8px;display:none}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--dk);color:#fff;padding:11px 20px;border-radius:8px;font-size:12.5px;opacity:0;pointer-events:none;transition:all .25s;z-index:60}
+.toast.show{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
 <body>
@@ -43,7 +63,10 @@ tr:hover td{background:var(--lt)}
     <h1>Suivi des demandes de congés</h1>
     <div class="sub" id="lastUpdate">Chargement...</div>
   </div>
-  <button class="refresh" onclick="load()">↻ Actualiser</button>
+  <div class="hdrBtns">
+    <button class="addBtn" onclick="openAddModal()">+ Ajouter une demande (papier)</button>
+    <button class="refresh" onclick="load()">↻ Actualiser</button>
+  </div>
 </div>
 
 <div class="view-tabs">
@@ -75,9 +98,47 @@ tr:hover td{background:var(--lt)}
 </table>
 <div class="empty" id="empty" style="display:none">Aucune demande trouvée.</div>
 
+<div class="modal" id="mdlAdd">
+  <div class="modalBox">
+    <h2>Ajouter une demande papier</h2>
+    <div class="note">Pour une demande de congé déjà faite sur papier avant la mise en place de l'outil (ex. fin 2026 / début 2027). Elle sera enregistrée comme déjà validée et apparaîtra immédiatement sur le calendrier du directeur concerné.</div>
+    <div class="formRow">
+      <label>Société / Magasin</label>
+      <input type="text" id="addSoc" list="addSocList" placeholder="ex. CAENPO">
+      <datalist id="addSocList"></datalist>
+    </div>
+    <div class="formRow2">
+      <div class="formRow"><label>Nom</label><input type="text" id="addNom" placeholder="DUPONT"></div>
+      <div class="formRow"><label>Prénom</label><input type="text" id="addPrenom" placeholder="Marie"></div>
+    </div>
+    <div class="formRow">
+      <label>Type</label>
+      <select id="addType">
+        <option value="CP">CP</option>
+        <option value="ABS">Absence</option>
+        <option value="CP+ABS">CP + Absence</option>
+      </select>
+    </div>
+    <div class="formRow2">
+      <div class="formRow"><label>Date de début</label><input type="date" id="addDebut"></div>
+      <div class="formRow"><label>Date de fin</label><input type="date" id="addFin"></div>
+    </div>
+    <div class="formErr" id="addErr"></div>
+    <div class="modalBtns">
+      <button class="btnCancel" onclick="closeAddModal()">Annuler</button>
+      <button class="btnSave" id="addSaveBtn" onclick="submitManualConge()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
 <script>
 // ⚠️ Remplacer par l'URL de votre webhook n8n "get-demandes"
 var N8N_URL = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-demandes';
+// Même webhook que celui utilisé par l'outil de demande de congés en ligne
+// pour enregistrer une demande arrivée au bout de son circuit (etape:'termine',
+// statut:'valide') : on le réutilise tel quel pour les demandes papier.
+var N8N_LOG = 'https://edgard-opticiens.app.n8n.cloud/webhook/log-demande';
 
 var DATA = [];
 var ARCHIVE = [];
@@ -200,6 +261,8 @@ function load(){
       var socs=[...new Set(DATA.concat(ARCHIVE).map(function(d){return d.societe;}).filter(Boolean))].sort();
       var sel=document.getElementById('fSoc');
       sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+      var dl=document.getElementById('addSocList');
+      if(dl)dl.innerHTML=socs.map(function(s){return '<option value="'+s+'">';}).join('');
       document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR')+' ('+raw.length+' lignes, '+DATA.length+' demandes actives, '+ARCHIVE.length+' archivées)';
       render();
     })
@@ -220,6 +283,84 @@ function scheduleRefresh(){
 document.addEventListener('visibilitychange',function(){
   if(!document.hidden) load(); // recharge immédiatement au retour sur l'onglet
 });
+
+/* ─── Ajout manuel d'une demande papier (antérieure à l'outil) ───
+   Réutilise le même mécanisme que la validation finale d'une demande en
+   ligne (etape:'termine', statut:'valide' envoyés à /webhook/log-demande) :
+   la ligne créée est donc immédiatement traitée comme une demande normale,
+   déjà validée — elle s'affiche sur ce tableau de bord et, parce que le
+   calendrier directeur ne filtre que sur le statut (valide/en_attente), elle
+   apparaît aussitôt sur le calendrier du magasin concerné. */
+function toast(m,ms){
+  var t=document.getElementById('toast');
+  t.textContent=m;t.classList.add('show');
+  clearTimeout(t._h);
+  t._h=setTimeout(function(){t.classList.remove('show')},ms||3500);
+}
+function openAddModal(){
+  ['addSoc','addNom','addPrenom','addDebut','addFin'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('addType').value='CP';
+  var err=document.getElementById('addErr'); err.style.display='none'; err.textContent='';
+  document.getElementById('mdlAdd').classList.add('show');
+}
+function closeAddModal(){ document.getElementById('mdlAdd').classList.remove('show'); }
+document.getElementById('mdlAdd').addEventListener('click',function(e){ if(e.target===this) closeAddModal(); });
+function makeIdManuel(societe,nom,prenom,debut){ return societe+'_'+nom+'_'+prenom+'_'+debut; }
+function submitManualConge(){
+  var err=document.getElementById('addErr');
+  err.style.display='none'; err.textContent='';
+
+  var societe=document.getElementById('addSoc').value.trim();
+  var nom=document.getElementById('addNom').value.trim();
+  var prenom=document.getElementById('addPrenom').value.trim();
+  var type=document.getElementById('addType').value;
+  var debut=document.getElementById('addDebut').value;
+  var fin=document.getElementById('addFin').value || debut;
+
+  if(!societe||!nom||!prenom||!debut){
+    err.textContent='Société, nom, prénom et date de début sont obligatoires.';
+    err.style.display='block';
+    return;
+  }
+  if(fin<debut){
+    err.textContent='La date de fin ne peut pas être avant la date de début.';
+    err.style.display='block';
+    return;
+  }
+
+  var id=makeIdManuel(societe,nom,prenom,debut);
+  var exists=DATA.concat(ARCHIVE).some(function(d){return d.id===id;});
+  if(exists && !confirm('Une demande existe déjà pour '+prenom+' '+nom+' ('+societe+') à cette date de début. Continuer écrasera cette demande existante avec les nouvelles informations. Continuer ?')){
+    return;
+  }
+
+  var btn=document.getElementById('addSaveBtn');
+  btn.disabled=true; btn.textContent='Enregistrement...';
+
+  var payload={
+    id:id, societe:societe, nom:nom, prenom:prenom, type:type,
+    date_debut:debut, date_fin:fin,
+    etape:'termine', statut:'valide',
+    en_attente_nom:'', en_attente_email:'', lien:'',
+    date_creation:new Date().toISOString()
+  };
+
+  fetch(N8N_LOG,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json().catch(function(){return {};}); })
+    .then(function(){
+      closeAddModal();
+      toast('Demande ajoutée — visible sur le calendrier du directeur ✓');
+      load();
+    })
+    .catch(function(e){
+      console.error(e);
+      err.textContent='Erreur lors de l\'enregistrement — réessayez.';
+      err.style.display='block';
+    })
+    .finally(function(){
+      btn.disabled=false; btn.textContent='Enregistrer';
+    });
+}
 
 load();
 scheduleRefresh();
