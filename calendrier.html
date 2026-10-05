@@ -340,7 +340,8 @@ function render(){
   var cells = [];
   for(var i=firstDow-1;i>=0;i--){ cells.push({n:prevDays-i, out:true}); }
   for(var d=1; d<=daysInMonth; d++){ cells.push({n:d, out:false, date:new Date(year,month,d)}); }
-  while(cells.length%7!==0){ cells.push({n:cells.length, out:true}); }
+  var nextN=1;
+  while(cells.length%7!==0){ cells.push({n:nextN++, out:true}); }
 
   var grid = document.getElementById('grid');
   grid.innerHTML = cells.map(function(c){
