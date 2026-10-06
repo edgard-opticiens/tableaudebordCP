@@ -116,7 +116,7 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
     <h1>Calendrier des absences — <span id="dirMagasin"></span></h1>
     <div class="sub" id="lastUpdate">Chargement...</div>
   </div>
-  <button class="refresh" onclick="load()">↻ Actualiser</button>
+  <div><button class="refresh" onclick="load()">↻ Actualiser</button> <button class="refresh" id="dirLogout" onclick="dirLogout()" style="display:none;background:#fff;color:#1A1A1A;border:1px solid #E0DCD0">Changer de magasin</button></div>
 </div>
 
 <div class="legend">
@@ -175,9 +175,45 @@ function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]
 function isGdo(soc){ return Object.prototype.hasOwnProperty.call(CODES_DIRECTEUR_GDO, soc); }
 
 var LOCKED_SOCIETE = null;
+
+/* ===== Session directeur partagée =====
+   Tous les outils sont sur edgard-opticiens.github.io : le navigateur partage donc ce stockage entre le portail
+   et les outils. Le code n'est saisi qu'une fois (valable 30 jours d'inactivité) ; il est revérifié à chaque
+   ouverture, donc un code changé par les RH déconnecte automatiquement. */
+var DIR_SESSION_KEY = 'edgard_dir_session_v1';
+var DIR_SESSION_JOURS = 30;
+function dirHash(s){var h1=0xdeadbeef,h2=0x41c6ce57;for(var i=0,c;i<s.length;i++){c=s.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677);}
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);}
+function dirSessionSave(soc,pin){
+  try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify({soc:String(soc).toUpperCase(),h:dirHash(String(soc).toUpperCase()+':'+pin),t:Date.now()}));}catch(e){}
+}
+function dirSessionClear(){try{localStorage.removeItem(DIR_SESSION_KEY);}catch(e){}}
+/* Renvoie le magasin (clé du tableau de codes de cette page) si une session valide existe, sinon null */
+function dirSessionGet(codes){
+  try{
+    var o=JSON.parse(localStorage.getItem(DIR_SESSION_KEY)||'null');
+    if(!o||!o.soc||!o.h)return null;
+    if(Date.now()-o.t>DIR_SESSION_JOURS*864e5){dirSessionClear();return null;}
+    for(var k in codes){
+      if(Object.prototype.hasOwnProperty.call(codes,k)&&k.toUpperCase()===o.soc){
+        if(codes[k]&&dirHash(o.soc+':'+codes[k])===o.h){
+          o.t=Date.now();try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify(o));}catch(e){}
+          return k;
+        }
+        dirSessionClear();return null; // code changé par les RH : session invalidée
+      }
+    }
+    return null; // magasin d'une autre enseigne (ex. session GdO sur le portail Edgard) : on la conserve
+  }catch(e){return null;}
+}
+function dirLogout(){dirSessionClear();location.reload();}
+
 var IS_GDO = false;
 
 function initGate(){
+  var deja = dirSessionGet(CODES_DIRECTEUR);
+  if(deja){ entrerDirecteur(deja); return; }
   var sel = document.getElementById('gateSoc');
   Object.keys(CODES_DIRECTEUR).sort().forEach(function(code){
     var o = document.createElement('option');
@@ -193,6 +229,10 @@ function tryGate(){
   if(!CODES_DIRECTEUR[soc] || CODES_DIRECTEUR[soc] !== pin){
     err.textContent = 'Code incorrect.'; document.getElementById('gatePin').value=''; return;
   }
+  dirSessionSave(soc, pin);
+  entrerDirecteur(soc);
+}
+function entrerDirecteur(soc){
   LOCKED_SOCIETE = soc;
   IS_GDO = isGdo(soc);
   document.getElementById('dirMagasin').textContent = soc;
@@ -201,6 +241,7 @@ function tryGate(){
   if(IS_GDO){
     Array.prototype.forEach.call(document.querySelectorAll('.gdo-hide-st'), function(el){ el.style.display = 'none'; });
   }
+  var lo=document.getElementById('dirLogout'); if(lo) lo.style.display='inline-block';
   load();
   setInterval(load, 300000);
 }
