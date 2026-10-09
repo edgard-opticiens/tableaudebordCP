@@ -233,7 +233,22 @@ function entrer(session){
   document.getElementById('app').style.display = 'block';
   var lo=document.getElementById('dirLogout'); if(lo) lo.style.display='inline-block';
   load();
-  setInterval(load, 300000);
+  /* Rafraichissement auto : toutes les 60 min (c'etait 5 min), et seulement si l'onglet est
+     affiche a l'ecran. Recharge immediate si l'onglet redevient visible apres une pause plus
+     longue que l'intervalle. */
+  var AUTOREFRESH_MS = 3600000;
+  var lastAutoLoad = Date.now();
+  setInterval(function(){
+    if (document.visibilityState !== 'visible') return;
+    load();
+    lastAutoLoad = Date.now();
+  }, AUTOREFRESH_MS);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && (Date.now() - lastAutoLoad) > AUTOREFRESH_MS){
+      load();
+      lastAutoLoad = Date.now();
+    }
+  });
 }
 document.getElementById('gatePin').addEventListener('keydown', function(e){ if(e.key==='Enter') tryGate(); });
 
