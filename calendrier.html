@@ -33,8 +33,6 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
 .sw.cp-attente{background:#E3F5E9;border:1.5px dashed var(--green)}
 .sw.abs-valide{background:var(--orange)}
 .sw.abs-attente{background:#FDEBD8;border:1.5px dashed var(--orange)}
-.sw.st-valide{background:var(--blue)}
-.sw.st-attente{background:#DCEAF5;border:1.5px dashed var(--blue)}
 
 .monthbar{max-width:1100px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;gap:14px}
 .monthbar button{background:#fff;border:1.5px solid var(--bd);color:var(--dk);width:34px;height:34px;border-radius:8px;font-size:15px;cursor:pointer}
@@ -63,8 +61,6 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
 .bubble.cp-attente{background:#E3F5E9;color:#1e7a45;border:1px dashed var(--green)}
 .bubble.abs-valide{background:var(--orange);color:#fff;font-weight:600}
 .bubble.abs-attente{background:#FDEBD8;color:#a3560f;border:1px dashed var(--orange)}
-.bubble.st-valide{background:var(--blue);color:#fff;font-weight:600}
-.bubble.st-attente{background:#DCEAF5;color:#1c5983;border:1px dashed var(--blue)}
 .bubble.more{background:none;color:var(--md);font-weight:700;padding:1.5px 2px}
 
 .detail{max-width:1100px;margin:14px auto 0;background:#fff;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.07);padding:16px 18px;display:none}
@@ -76,8 +72,6 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
 .dot.cp-attente{background:#E3F5E9;border:1.5px solid var(--green)}
 .dot.abs-valide{background:var(--orange)}
 .dot.abs-attente{background:#FDEBD8;border:1.5px solid var(--orange)}
-.dot.st-valide{background:var(--blue)}
-.dot.st-attente{background:#DCEAF5;border:1.5px solid var(--blue)}
 .detail .name{font-weight:700;flex:0 0 auto}
 .detail .meta{color:var(--md);font-size:11.5px}
 .detail .empty{color:var(--md);font-size:12.5px;padding:6px 0}
@@ -103,8 +97,8 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
     <h2>Espace directeur</h2>
     <p>Sélectionnez votre magasin et saisissez votre code directeur</p>
     <select id="gateSoc"><option value="">— Choisir un magasin —</option></select>
-    <input type="password" id="gatePin" placeholder="Code directeur" maxlength="6">
-    <button type="button" onclick="tryGate()">Accéder</button>
+    <input type="password" id="gatePin" placeholder="Code directeur" maxlength="24" autocomplete="off">
+    <button type="button" id="gateBtn" onclick="tryGate()">Accéder</button>
     <div id="gateErr"></div>
   </div>
 </div>
@@ -124,8 +118,6 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
   <div class="li"><span class="sw cp-attente"></span> Congé payé en attente</div>
   <div class="li"><span class="sw abs-valide"></span> Absence validée</div>
   <div class="li"><span class="sw abs-attente"></span> Absence en attente</div>
-  <div class="li gdo-hide-st"><span class="sw st-valide"></span> Samedi tournant validé</div>
-  <div class="li gdo-hide-st"><span class="sw st-attente"></span> Samedi tournant en attente</div>
 </div>
 
 <div class="stats" id="stats"></div>
@@ -153,94 +145,92 @@ body{font-family:'DM Sans',sans-serif;background:#F2EFE8;min-height:100vh;paddin
 </div>
 
 <script>
-/* ============================ CONFIG ============================ */
-var N8N_DEMANDES = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-demandes';
-var N8N_SAMEDIS  = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-samedis-tournant';
+/* ============================ CONNEXION SECURISEE =====================================
+   Le code directeur est verifie par le serveur (n8n) ; la page ne garde qu'un jeton de
+   session. Plus aucun code en clair dans cette page. Session partagee avec les autres
+   outils directeur (meme cle que tableaudebordCP et le planning apprentis). ========== */
+var N8N_AUTH_LOGIN = 'https://edgard-opticiens.app.n8n.cloud/webhook/auth-login';
+var N8N_AUTH_READ  = 'https://edgard-opticiens.app.n8n.cloud/webhook/secure-read';
 
-// Memes codes que l'Espace directeur du portail (Edgard + GdO — les samedis tournants
-// ne concernent que les magasins Edgard, mais le calendrier reste accessible partout pour les congés)
-var CODES_DIRECTEUR_EDGARD = {
-  "ANGO":"vv2ex3","BIARRO":"t5xaaa","BORDO":"ykubz3","CAENPO":"3cv3y9","GIRO":"yampws",
-  "HAVRO":"x663ra","JISAM":"8522mv","LYONO":"dtqhpr","MANSO":"2ar48z","MARSEILLO":"e8smvp",
-  "NANCEO":"253ruj","NANTO":"jy8bb8","NICEO":"s6w62v","ORLO":"8ty2t3","REIMO":"9demwu",
-  "STRABO":"z4jx7z","TURO":"c33acr"
-};
-var CODES_DIRECTEUR_GDO = {
-  "CHATO":"uuqjua","CHEMILLO":"qo6ut6","CHOLO":"5hrwdv","DUNES":"j7igxx","ECUME":"kdctla",
-  "FORMIO":"s4t20v","MARAIS":"ljcs5u","MUDO":"oses5i","NIORTO":"eoro9o"
-};
-var CODES_DIRECTEUR = Object.assign({}, CODES_DIRECTEUR_EDGARD, CODES_DIRECTEUR_GDO);
+var MAGASINS_EDGARD = ['ANGO','BIARRO','BORDO','CAENPO','GIRO','HAVRO','JISAM','LYONO','MANSO','MARSEILLO','NANCEO','NANTO','NICEO','ORLO','REIMO','STRABO','TURO'];
+var MAGASINS_GDO = ['CHATO','CHEMILLO','CHOLO','DUNES','ECUME','FORMIO','MARAIS','MUDO','NIORTO'];
+var MAGASINS = MAGASINS_EDGARD.concat(MAGASINS_GDO).sort();
 
 function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase(); }
-function isGdo(soc){ return Object.prototype.hasOwnProperty.call(CODES_DIRECTEUR_GDO, soc); }
 
 var LOCKED_SOCIETE = null;
+var CURRENT_SESSION = null;
 
-/* ===== Session directeur partagée =====
-   Tous les outils sont sur edgard-opticiens.github.io : le navigateur partage donc ce stockage entre le portail
-   et les outils. Le code n'est saisi qu'une fois (valable 30 jours d'inactivité) ; il est revérifié à chaque
-   ouverture, donc un code changé par les RH déconnecte automatiquement. */
-var DIR_SESSION_KEY = 'edgard_dir_session_v1';
-var DIR_SESSION_JOURS = 30;
-function dirHash(s){var h1=0xdeadbeef,h2=0x41c6ce57;for(var i=0,c;i<s.length;i++){c=s.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677);}
-  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
-  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);}
-function dirSessionSave(soc,pin){
-  try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify({soc:String(soc).toUpperCase(),h:dirHash(String(soc).toUpperCase()+':'+pin),t:Date.now()}));}catch(e){}
-}
-function dirSessionClear(){try{localStorage.removeItem(DIR_SESSION_KEY);}catch(e){}}
-/* Renvoie le magasin (clé du tableau de codes de cette page) si une session valide existe, sinon null */
-function dirSessionGet(codes){
+var DIR_KEY = 'edgard_session_directeur_v1'; // partagee avec tableaudebordCP et le planning apprentis
+
+function sessionGet(key, wantRole){
   try{
-    var o=JSON.parse(localStorage.getItem(DIR_SESSION_KEY)||'null');
-    if(!o||!o.soc||!o.h)return null;
-    if(Date.now()-o.t>DIR_SESSION_JOURS*864e5){dirSessionClear();return null;}
-    for(var k in codes){
-      if(Object.prototype.hasOwnProperty.call(codes,k)&&k.toUpperCase()===o.soc){
-        if(codes[k]&&dirHash(o.soc+':'+codes[k])===o.h){
-          o.t=Date.now();try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify(o));}catch(e){}
-          return k;
-        }
-        dirSessionClear();return null; // code changé par les RH : session invalidée
-      }
-    }
-    return null; // magasin d'une autre enseigne (ex. session GdO sur le portail Edgard) : on la conserve
-  }catch(e){return null;}
+    var o = JSON.parse(localStorage.getItem(key) || 'null');
+    if(!o || !o.token) return null;
+    if(wantRole && o.role !== wantRole) return null;
+    if(Number(o.expire) <= Date.now()){ localStorage.removeItem(key); return null; }
+    return o;
+  }catch(e){ return null; }
 }
-function dirLogout(){dirSessionClear();location.reload();}
+function sessionSave(key, o){ try{ localStorage.setItem(key, JSON.stringify(o)); }catch(e){} }
+function sessionClear(key){ try{ localStorage.removeItem(key); }catch(e){} }
 
-var IS_GDO = false;
+function authPost(url, body){
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+    .then(function(r){ return r.json().catch(function(){ return {ok:false}; }).then(function(j){ j.httpStatus = r.status; return j; }); });
+}
+function authRead(session, source, params){
+  return authPost(N8N_AUTH_READ, {token: session.token, source: source, params: params || {}}).then(function(j){
+    if(j && j.ok) return j.resultat || {};
+    if(j && (j.error === 'session' || j.httpStatus === 401)) throw new Error('session');
+    throw new Error((j && j.error) || 'lecture');
+  });
+}
+
+function dirLogout(){ sessionClear(DIR_KEY); location.reload(); }
 
 function initGate(){
-  var deja = dirSessionGet(CODES_DIRECTEUR);
-  if(deja){ entrerDirecteur(deja); return; }
+  var existing = sessionGet(DIR_KEY, 'DIR');
+  if(existing){ entrer(existing); return; }
   var sel = document.getElementById('gateSoc');
-  Object.keys(CODES_DIRECTEUR).sort().forEach(function(code){
-    var o = document.createElement('option');
-    o.value = code; o.textContent = code;
-    sel.appendChild(o);
+  MAGASINS.forEach(function(m){
+    var o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o);
   });
 }
 function tryGate(){
   var soc = document.getElementById('gateSoc').value;
-  var pin = document.getElementById('gatePin').value.trim();
-  var err = document.getElementById('gateErr');
+  var code = document.getElementById('gatePin').value.trim();
+  var err = document.getElementById('gateErr'), btn = document.getElementById('gateBtn');
   if(!soc){ err.textContent = 'Choisissez votre magasin.'; return; }
-  if(!CODES_DIRECTEUR[soc] || CODES_DIRECTEUR[soc] !== pin){
-    err.textContent = 'Code incorrect.'; document.getElementById('gatePin').value=''; return;
-  }
-  dirSessionSave(soc, pin);
-  entrerDirecteur(soc);
+  if(!code){ err.textContent = 'Saisissez votre code.'; return; }
+  btn.disabled = true; err.style.color = '#666'; err.textContent = 'Connexion en cours…';
+  authPost(N8N_AUTH_LOGIN, { role: 'DIR', magasin: soc, code: code }).then(function(j){
+    btn.disabled = false;
+    if(j && j.ok){
+      var sess = { token: j.token, role: j.role, magasin: j.magasin, expire: j.expire };
+      sessionSave(DIR_KEY, sess);
+      err.textContent = '';
+      entrer(sess);
+    } else if(j && j.error === 'verrouille'){
+      err.style.color = '#C0392B';
+      err.textContent = 'Trop d\'essais. Réessayez dans ' + (j.minutes || 15) + ' min.';
+    } else {
+      err.style.color = '#C0392B';
+      err.textContent = 'Code incorrect.';
+      document.getElementById('gatePin').value = '';
+    }
+  }).catch(function(){
+    btn.disabled = false;
+    err.style.color = '#C0392B';
+    err.textContent = 'Erreur réseau — réessayez.';
+  });
 }
-function entrerDirecteur(soc){
-  LOCKED_SOCIETE = soc;
-  IS_GDO = isGdo(soc);
-  document.getElementById('dirMagasin').textContent = soc;
+function entrer(session){
+  CURRENT_SESSION = session;
+  LOCKED_SOCIETE = normSoc(session.magasin);
+  document.getElementById('dirMagasin').textContent = session.magasin;
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  if(IS_GDO){
-    Array.prototype.forEach.call(document.querySelectorAll('.gdo-hide-st'), function(el){ el.style.display = 'none'; });
-  }
   var lo=document.getElementById('dirLogout'); if(lo) lo.style.display='inline-block';
   load();
   setInterval(load, 300000);
@@ -249,7 +239,6 @@ document.getElementById('gatePin').addEventListener('keydown', function(e){ if(e
 
 /* ============================ DONNEES ============================ */
 var CONGES = [];   // {nom,prenom,type,statut,debut:Date,fin:Date}
-var SAMEDIS = [];  // {nom,prenom,statut,date:Date}
 var CUR = new Date(); CUR.setDate(1); CUR.setHours(0,0,0,0);
 var SELECTED = null; // 'YYYY-MM-DD' du jour selectionne pour le detail
 
@@ -298,7 +287,7 @@ function buildMonthMap(){
   var monthEnd = new Date(year, month+1, 0);
   var search = (document.getElementById('fSearch').value||'').toLowerCase();
   var map = {};
-  function ensure(k){ if(!map[k]) map[k]={cpValide:[],cpAttente:[],absValide:[],absAttente:[],stValide:[],stAttente:[]}; return map[k]; }
+  function ensure(k){ if(!map[k]) map[k]={cpValide:[],cpAttente:[],absValide:[],absAttente:[]}; return map[k]; }
 
   CONGES.forEach(function(c){
     if(!c.debut) return;
@@ -318,16 +307,6 @@ function buildMonthMap(){
     }
   });
 
-  SAMEDIS.forEach(function(s){
-    if(!s.date) return;
-    if(localMidnight(s.date) < monthStart || localMidnight(s.date) > monthEnd) return;
-    if(search && !((s.nom||'')+' '+(s.prenom||'')).toLowerCase().includes(search)) return;
-    var k = dkey(s.date);
-    var bucket = ensure(k);
-    var entry = {label:shortName(s.prenom,s.nom), nom:s.nom, prenom:s.prenom, type:'Samedi tournant', dates:s};
-    if(s.statut==='valide') bucket.stValide.push(entry); else bucket.stAttente.push(entry);
-  });
-
   return map;
 }
 
@@ -341,9 +320,7 @@ function renderDetail(k, bucket){
     bucket.cpValide.map(function(e){return Object.assign({},e,{cls:'cp-valide',lib:(e.type||'Congé payé')+' — validé'});}),
     bucket.cpAttente.map(function(e){return Object.assign({},e,{cls:'cp-attente',lib:(e.type||'Congé payé')+' — en attente'});}),
     bucket.absValide.map(function(e){return Object.assign({},e,{cls:'abs-valide',lib:(e.type||'Absence')+' — validée'});}),
-    bucket.absAttente.map(function(e){return Object.assign({},e,{cls:'abs-attente',lib:(e.type||'Absence')+' — en attente'});}),
-    bucket.stValide.map(function(e){return Object.assign({},e,{cls:'st-valide',lib:'Samedi tournant validé'});}),
-    bucket.stAttente.map(function(e){return Object.assign({},e,{cls:'st-attente',lib:'Samedi tournant — en attente'});})
+    bucket.absAttente.map(function(e){return Object.assign({},e,{cls:'abs-attente',lib:(e.type||'Absence')+' — en attente'});})
   );
   var rows = all.length ? all.map(function(e){
     return '<div class="row"><span class="dot '+e.cls+'"></span><span class="name">'+(e.prenom||'')+' '+(e.nom||'')+'</span><span class="meta">'+e.lib+'</span></div>';
@@ -358,19 +335,17 @@ function render(){
   var map = buildMonthMap();
 
   // Stats du mois
-  var uniqCp={}, uniqAbs={}, uniqSt={}, totalCpDays=0, totalAbsDays=0, totalSt=0;
+  var uniqCp={}, uniqAbs={}, totalCpDays=0, totalAbsDays=0;
   Object.keys(map).forEach(function(k){
     var b=map[k];
     b.cpValide.concat(b.cpAttente).forEach(function(e){ uniqCp[e.nom+'|'+e.prenom]=true; totalCpDays++; });
     b.absValide.concat(b.absAttente).forEach(function(e){ uniqAbs[e.nom+'|'+e.prenom]=true; totalAbsDays++; });
-    b.stValide.concat(b.stAttente).forEach(function(e){ uniqSt[e.nom+'|'+e.prenom]=true; totalSt++; });
   });
   document.getElementById('stats').innerHTML =
     '<div class="stat" style="border-color:#27AE60"><div class="n">'+Object.keys(uniqCp).length+'</div><div class="l">Collaborateurs en CP ce mois</div></div>'+
     '<div class="stat" style="border-color:#27AE60"><div class="n">'+totalCpDays+'</div><div class="l">Jours de CP cumulés</div></div>'+
     '<div class="stat" style="border-color:#E67E22"><div class="n">'+Object.keys(uniqAbs).length+'</div><div class="l">Collaborateurs en absence ce mois</div></div>'+
-    '<div class="stat" style="border-color:#E67E22"><div class="n">'+totalAbsDays+'</div><div class="l">Jours d\'absence cumulés</div></div>'+
-    (IS_GDO ? '' : '<div class="stat" style="border-color:#2980B9"><div class="n">'+totalSt+'</div><div class="l">Samedis tournants ce mois</div></div>');
+    '<div class="stat" style="border-color:#E67E22"><div class="n">'+totalAbsDays+'</div><div class="l">Jours d\'absence cumulés</div></div>';
 
   // Grille
   var year = CUR.getFullYear(), month = CUR.getMonth();
@@ -396,16 +371,14 @@ function render(){
         b.cpValide.map(function(e){return {cls:'cp-valide',label:e.label};}),
         b.cpAttente.map(function(e){return {cls:'cp-attente',label:e.label};}),
         b.absValide.map(function(e){return {cls:'abs-valide',label:e.label};}),
-        b.absAttente.map(function(e){return {cls:'abs-attente',label:e.label};}),
-        b.stValide.map(function(e){return {cls:'st-valide',label:e.label};}),
-        b.stAttente.map(function(e){return {cls:'st-attente',label:e.label};})
+        b.absAttente.map(function(e){return {cls:'abs-attente',label:e.label};})
       );
       var shown = all.slice(0,3);
       bubbles = shown.map(function(e){return '<span class="bubble '+e.cls+'">'+e.label+'</span>';}).join('');
       if(all.length>3) bubbles += '<span class="bubble more">+'+(all.length-3)+' autre(s)</span>';
       // dots mobiles : couleur pleine selon la categorie, contour pointille pour "en attente"
-      var DOT_COLOR = {'cp-valide':'var(--green)','cp-attente':'#E3F5E9','abs-valide':'var(--orange)','abs-attente':'#FDEBD8','st-valide':'var(--blue)','st-attente':'#DCEAF5'};
-      var DOT_BORDER = {'cp-attente':'var(--green)','abs-attente':'var(--orange)','st-attente':'var(--blue)'};
+      var DOT_COLOR = {'cp-valide':'var(--green)','cp-attente':'#E3F5E9','abs-valide':'var(--orange)','abs-attente':'#FDEBD8'};
+      var DOT_BORDER = {'cp-attente':'var(--green)','abs-attente':'var(--orange)'};
       dots = all.slice(0,6).map(function(e){
         var bg = DOT_COLOR[e.cls];
         var bd = DOT_BORDER[e.cls] ? 'border:1px solid '+DOT_BORDER[e.cls]+';' : '';
@@ -421,14 +394,11 @@ function render(){
 }
 
 function load(){
+  if(!CURRENT_SESSION) return;
   document.getElementById('lastUpdate').textContent='Chargement...';
-  Promise.all([
-    fetch(N8N_DEMANDES).then(function(r){return r.json();}).catch(function(){return {data:[],archive:[]};}),
-    IS_GDO ? Promise.resolve({data:[]}) : fetch(N8N_SAMEDIS).then(function(r){return r.json();}).catch(function(){return {data:[]};})
-  ]).then(function(results){
-    var rawDemandes = Array.isArray(results[0]) ? results[0] : (results[0].data||[]);
-    var rawArchive = Array.isArray(results[0]) ? [] : (results[0].archive||[]);
-    var rawSamedis = Array.isArray(results[1]) ? results[1] : (results[1].data||[]);
+  authRead(CURRENT_SESSION, 'demandes', {}).then(function(data){
+    var rawDemandes = Array.isArray(data) ? data : (data.data||[]);
+    var rawArchive = Array.isArray(data) ? [] : (data.archive||[]);
 
     var demandes = dedupeLatest(rawDemandes.concat(rawArchive));
     CONGES = demandes
@@ -441,16 +411,10 @@ function load(){
         };
       });
 
-    SAMEDIS = rawSamedis
-      .filter(function(s){ return normSoc(s.societe)===LOCKED_SOCIETE; })
-      .filter(function(s){ return s.statut==='valide' || s.statut==='en_attente'; })
-      .map(function(s){
-        return { nom:s.nom, prenom:s.prenom, statut:s.statut, date: excelOrIsoDate(s.date_samedi) };
-      });
-
     document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR');
     render();
   }).catch(function(e){
+    if(String(e.message)==='session'){ sessionClear(DIR_KEY); location.reload(); return; }
     document.getElementById('lastUpdate').textContent='Erreur de chargement — réessayez plus tard';
     console.error(e);
   });
