@@ -47,16 +47,16 @@ tr:hover td{background:var(--lt)}
     <h1>Suivi des demandes de congés</h1>
     <div class="sub" id="lastUpdate">Chargement...</div>
   </div>
-  <div><button class="refresh" onclick="load()">↻ Actualiser</button> <button class="refresh" id="dirLogout" onclick="dirLogout()" style="display:none;background:#fff;color:#1A1A1A;border:1px solid #E0DCD0">Changer de magasin</button></div>
+  <div><button class="refresh" onclick="rafraichir()">↻ Actualiser</button> <button class="refresh" id="dirLogout" onclick="dirLogout()" style="display:none;background:#fff;color:#1A1A1A;border:1px solid #E0DCD0">Changer de magasin</button></div>
 </div>
 
-<div id="gate" style="display:none;position:fixed;inset:0;background:#F2EFE8;z-index:50;display:none;align-items:center;justify-content:center;padding:20px">
+<div id="gate" style="display:none;position:fixed;inset:0;background:#F2EFE8;z-index:50;align-items:center;justify-content:center;padding:20px">
   <div style="background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.12);max-width:360px;width:100%;padding:30px 26px;text-align:center">
-    <div style="font-family:'Playfair Display',serif;font-size:19px;margin-bottom:4px">Espace directeur</div>
-    <div style="font-size:12.5px;color:#666;margin-bottom:18px">Sélectionnez votre magasin et saisissez votre code directeur</div>
+    <div style="font-family:'Playfair Display',serif;font-size:19px;margin-bottom:4px" id="gateTitle">Espace directeur</div>
+    <div style="font-size:12.5px;color:#666;margin-bottom:18px" id="gateSub">Sélectionnez votre magasin et saisissez votre code directeur</div>
     <select id="gateSoc" style="width:100%;padding:10px;border:1.5px solid #E0DCD0;border-radius:6px;margin-bottom:10px;font-size:13px"><option value="">— Choisir un magasin —</option></select>
-    <input type="password" id="gatePin" placeholder="Code directeur" style="width:100%;padding:10px;border:1.5px solid #E0DCD0;border-radius:6px;text-align:center;letter-spacing:.2em;font-size:15px;margin-bottom:10px" maxlength="6">
-    <button onclick="tryGate()" style="width:100%;padding:11px;background:#1A1A1A;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">Accéder</button>
+    <input type="password" id="gatePin" placeholder="Code" autocomplete="off" style="width:100%;padding:10px;border:1.5px solid #E0DCD0;border-radius:6px;text-align:center;letter-spacing:.15em;font-size:15px;margin-bottom:10px" maxlength="24">
+    <button onclick="tryGate()" id="gateBtn" style="width:100%;padding:11px;background:#1A1A1A;color:#fff;border:none;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer">Accéder</button>
     <div id="gateErr" style="color:#C0392B;font-size:12px;margin-top:10px;min-height:16px"></div>
   </div>
 </div>
@@ -95,90 +95,119 @@ tr:hover td{background:var(--lt)}
 </div>
 
 <script>
-// ⚠️ Remplacer par l'URL de votre webhook n8n "get-demandes"
-var N8N_URL = 'https://edgard-opticiens.app.n8n.cloud/webhook/get-demandes';
-
-// Memes codes que l'Espace directeur des portails Edgard et GdO
-var CODES_DIRECTEUR = {
-  "ANGO":"vv2ex3","BIARRO":"t5xaaa","BORDO":"ykubz3","CAENPO":"3cv3y9","GIRO":"yampws",
-  "HAVRO":"x663ra","JISAM":"8522mv","LYONO":"dtqhpr","MANSO":"2ar48z","MARSEILLO":"e8smvp",
-  "NANCEO":"253ruj","NANTO":"jy8bb8","NICEO":"s6w62v","ORLO":"8ty2t3","REIMO":"9demwu",
-  "STRABO":"z4jx7z","TURO":"c33acr",
-  "CHATO":"uuqjua","CHEMILLO":"qo6ut6","CHOLO":"5hrwdv","DUNES":"j7igxx","ECUME":"kdctla",
-  "FORMIO":"s4t20v","MARAIS":"ljcs5u","MUDO":"oses5i","NIORTO":"eoro9o"
-};
-
-function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase(); }
+/* ============================ CONNEXION SECURISEE =====================================
+   Le code (directeur ou RH) est verifie par le serveur (n8n) ; la page ne garde qu'un jeton
+   de session. Plus aucun code en clair dans cette page (contrairement a l'ancienne version).
+   Session directeur partagee avec les autres outils directeur migres (meme navigateur, meme
+   site edgard-opticiens.github.io) ; session RH partagee avec le dashboard RH. ========== */
+var N8N_AUTH_LOGIN = 'https://edgard-opticiens.app.n8n.cloud/webhook/auth-login';
+var N8N_AUTH_READ  = 'https://edgard-opticiens.app.n8n.cloud/webhook/secure-read';
 
 var MODE_DIRECTEUR = new URLSearchParams(location.search).get('directeur') === '1';
-var LOCKED_SOCIETE = null; // code magasin normalise, une fois authentifie
+var LOCKED_SOCIETE = null; // magasin normalise du directeur connecte (vide = vue RH, toutes societes)
 
-/* ===== Session directeur partagée =====
-   Tous les outils sont sur edgard-opticiens.github.io : le navigateur partage donc ce stockage entre le portail
-   et les outils. Le code n'est saisi qu'une fois (valable 30 jours d'inactivité) ; il est revérifié à chaque
-   ouverture, donc un code changé par les RH déconnecte automatiquement. */
-var DIR_SESSION_KEY = 'edgard_dir_session_v1';
-var DIR_SESSION_JOURS = 30;
-function dirHash(s){var h1=0xdeadbeef,h2=0x41c6ce57;for(var i=0,c;i<s.length;i++){c=s.charCodeAt(i);h1=Math.imul(h1^c,2654435761);h2=Math.imul(h2^c,1597334677);}
-  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
-  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);}
-function dirSessionSave(soc,pin){
-  try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify({soc:String(soc).toUpperCase(),h:dirHash(String(soc).toUpperCase()+':'+pin),t:Date.now()}));}catch(e){}
-}
-function dirSessionClear(){try{localStorage.removeItem(DIR_SESSION_KEY);}catch(e){}}
-/* Renvoie le magasin (clé du tableau de codes de cette page) si une session valide existe, sinon null */
-function dirSessionGet(codes){
+var MAGASINS = ['ANGO','BIARRO','BORDO','CAENPO','CHATO','CHEMILLO','CHOLO','DUNES','ECUME','FORMIO','GIRO','HAVRO','JISAM','LYONO','MANSO','MARAIS','MARSEILLO','MUDO','NANCEO','NANTO','NICEO','NIORTO','ORLO','REIMO','STRABO','TURO'];
+
+var DIR_KEY = 'edgard_auth_v2'; // meme cle que les portails Edgard/GdO (Espace directeur) et le dashboard RH
+var RH_KEY  = 'edgard_auth_v2';              // meme cle que le dashboard RH
+
+function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase(); }
+
+function sessionGet(key, wantRole){
   try{
-    var o=JSON.parse(localStorage.getItem(DIR_SESSION_KEY)||'null');
-    if(!o||!o.soc||!o.h)return null;
-    if(Date.now()-o.t>DIR_SESSION_JOURS*864e5){dirSessionClear();return null;}
-    for(var k in codes){
-      if(Object.prototype.hasOwnProperty.call(codes,k)&&k.toUpperCase()===o.soc){
-        if(codes[k]&&dirHash(o.soc+':'+codes[k])===o.h){
-          o.t=Date.now();try{localStorage.setItem(DIR_SESSION_KEY,JSON.stringify(o));}catch(e){}
-          return k;
-        }
-        dirSessionClear();return null; // code changé par les RH : session invalidée
-      }
-    }
-    return null; // magasin d'une autre enseigne (ex. session GdO sur le portail Edgard) : on la conserve
-  }catch(e){return null;}
+    var o = JSON.parse(localStorage.getItem(key) || 'null');
+    if(!o || !o.token) return null;
+    if(wantRole && o.role !== wantRole) return null;
+    if(Number(o.expire) <= Date.now()){ localStorage.removeItem(key); return null; }
+    return o;
+  }catch(e){ return null; }
 }
-function dirLogout(){dirSessionClear();location.reload();}
+function sessionSave(key, o){ try{ localStorage.setItem(key, JSON.stringify(o)); }catch(e){} }
+function sessionClear(key){ try{ localStorage.removeItem(key); }catch(e){} }
 
+function authPost(url, body){
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+    .then(function(r){ return r.json().catch(function(){ return {ok:false}; }).then(function(j){ j.httpStatus = r.status; return j; }); });
+}
+function authRead(session, source, params){
+  return authPost(N8N_AUTH_READ, {token: session.token, source: source, params: params || {}}).then(function(j){
+    if(j && j.ok) return j.resultat || {};
+    if(j && (j.error === 'session' || j.httpStatus === 401)) throw new Error('session');
+    throw new Error((j && j.error) || 'lecture');
+  });
+}
+
+function currentKey(){ return MODE_DIRECTEUR ? DIR_KEY : RH_KEY; }
+
+function dirLogout(){
+  sessionClear(currentKey());
+  location.reload();
+}
 
 function initGate(){
-  var deja = dirSessionGet(CODES_DIRECTEUR);
-  if(deja){ entrerDirecteur(deja); return; }
-  var sel = document.getElementById('gateSoc');
-  Object.keys(CODES_DIRECTEUR).sort().forEach(function(code){
-    var o = document.createElement('option');
-    o.value = code; o.textContent = code;
-    sel.appendChild(o);
-  });
+  var existing = sessionGet(currentKey(), MODE_DIRECTEUR ? 'DIR' : 'RH');
+  if(existing){ entrer(existing); return; }
+  var socSel = document.getElementById('gateSoc');
+  if(MODE_DIRECTEUR){
+    document.getElementById('gateTitle').textContent = 'Espace directeur';
+    document.getElementById('gateSub').textContent = 'Sélectionnez votre magasin et saisissez votre code directeur';
+    socSel.style.display = '';
+    MAGASINS.forEach(function(m){
+      var o = document.createElement('option'); o.value = m; o.textContent = m; socSel.appendChild(o);
+    });
+  } else {
+    document.getElementById('gateTitle').textContent = 'Espace RH';
+    document.getElementById('gateSub').textContent = 'Saisissez votre code RH';
+    socSel.style.display = 'none';
+  }
   document.getElementById('gate').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
 }
 
 function tryGate(){
-  var soc = document.getElementById('gateSoc').value;
-  var pin = document.getElementById('gatePin').value.trim();
-  var err = document.getElementById('gateErr');
-  if(!soc){ err.textContent = 'Choisissez votre magasin.'; return; }
-  if(!CODES_DIRECTEUR[soc] || CODES_DIRECTEUR[soc] !== pin){
-    err.textContent = 'Code incorrect.'; document.getElementById('gatePin').value=''; return;
-  }
-  dirSessionSave(soc, pin);
-  entrerDirecteur(soc);
+  var soc = MODE_DIRECTEUR ? document.getElementById('gateSoc').value : '';
+  var code = document.getElementById('gatePin').value.trim();
+  var err = document.getElementById('gateErr'), btn = document.getElementById('gateBtn');
+  err.style.color = '#C0392B';
+  if(MODE_DIRECTEUR && !soc){ err.textContent = 'Choisissez votre magasin.'; return; }
+  if(!code){ err.textContent = 'Saisissez votre code.'; return; }
+  btn.disabled = true; err.style.color = '#666'; err.textContent = 'Connexion en cours…';
+  authPost(N8N_AUTH_LOGIN, { role: MODE_DIRECTEUR ? 'DIR' : 'RH', magasin: soc, code: code }).then(function(j){
+    btn.disabled = false;
+    if(j && j.ok){
+      var sess = { token: j.token, role: j.role, magasin: j.magasin, expire: j.expire };
+      sessionSave(currentKey(), sess);
+      err.textContent = '';
+      entrer(sess);
+    } else if(j && j.error === 'verrouille'){
+      err.style.color = '#C0392B';
+      err.textContent = 'Trop d\'essais. Réessayez dans ' + (j.minutes || 15) + ' min.';
+    } else {
+      err.style.color = '#C0392B';
+      err.textContent = 'Code incorrect.';
+      document.getElementById('gatePin').value = '';
+    }
+  }).catch(function(){
+    btn.disabled = false;
+    err.style.color = '#C0392B';
+    err.textContent = 'Erreur réseau — réessayez.';
+  });
 }
-function entrerDirecteur(soc){
-  LOCKED_SOCIETE = soc;
+
+var CURRENT_SESSION = null;
+
+function entrer(session){
+  CURRENT_SESSION = session;
+  LOCKED_SOCIETE = MODE_DIRECTEUR ? normSoc(session.magasin) : null;
   document.getElementById('gate').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  var lo=document.getElementById('dirLogout'); if(lo) lo.style.display='inline-block';
+  var lo = document.getElementById('dirLogout');
+  if(lo){ lo.style.display = 'inline-block'; lo.textContent = MODE_DIRECTEUR ? 'Changer de magasin' : 'Se déconnecter'; }
   load();
-  setInterval(load,60000);
+  setInterval(load, 60000);
 }
+
+function rafraichir(){ load(); }
 
 var DATA = [];
 var ARCHIVE = [];
@@ -314,9 +343,9 @@ function dedupeLatest(arr){
 }
 
 function load(){
+  if(!CURRENT_SESSION) return;
   document.getElementById('lastUpdate').textContent='Chargement...';
-  fetch(N8N_URL)
-    .then(function(r){return r.json();})
+  authRead(CURRENT_SESSION, 'demandes', {})
     .then(function(data){
       var raw=Array.isArray(data)?data:(data.data||[]);
       var rawArchive=Array.isArray(data)?[]:(data.archive||[]);
@@ -328,23 +357,20 @@ function load(){
       } else {
         var socs=[...new Set(DATA.concat(ARCHIVE).map(function(d){return d.societe;}).filter(Boolean))].sort();
         var sel=document.getElementById('fSoc');
-        sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+        if(sel) sel.innerHTML='<option value="">Toutes sociétés</option>'+socs.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
       }
       document.getElementById('lastUpdate').textContent='Mis à jour le '+new Date().toLocaleString('fr-FR')+' ('+raw.length+' lignes, '+DATA.length+' demandes actives, '+ARCHIVE.length+' archivées)';
       render();
     })
     .catch(function(e){
-      document.getElementById('lastUpdate').textContent='Erreur de chargement — vérifiez l\'URL n8n';
+      if(String(e.message)==='session'){ sessionClear(currentKey()); location.reload(); return; }
+      document.getElementById('lastUpdate').textContent='Erreur de chargement — réessayez dans un instant.';
       console.error(e);
     });
 }
 
-if(MODE_DIRECTEUR){
-  initGate();
-} else {
-  load();
-  setInterval(load,60000); // auto-refresh toutes les 60s
-}
+document.getElementById('gatePin').addEventListener('keydown', function(e){ if(e.key==='Enter') tryGate(); });
+initGate();
 </script>
 </body>
 </html>
