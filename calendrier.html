@@ -161,7 +161,7 @@ function normSoc(s){ return (s||'').toString().normalize('NFD').replace(/[̀-ͯ]
 var LOCKED_SOCIETE = null;
 var CURRENT_SESSION = null;
 
-var DIR_KEY = 'edgard_session_directeur_v1'; // partagee avec tableaudebordCP et le planning apprentis
+var DIR_KEY = 'edgard_auth_v2'; // meme cle que les portails Edgard/GdO (Espace directeur), tableaudebordCP et le planning apprentis
 
 function sessionGet(key, wantRole){
   try{
