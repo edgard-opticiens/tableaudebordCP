@@ -204,7 +204,22 @@ function entrer(session){
   var lo = document.getElementById('dirLogout');
   if(lo){ lo.style.display = 'inline-block'; lo.textContent = MODE_DIRECTEUR ? 'Changer de magasin' : 'Se déconnecter'; }
   load();
-  setInterval(load, 60000);
+  /* Rafraichissement auto : toutes les 60 min (c'etait 60 secondes — tres couteux en executions
+     n8n), et seulement si l'onglet est affiche a l'ecran. Recharge immediate si l'onglet redevient
+     visible apres une pause plus longue que l'intervalle. */
+  var AUTOREFRESH_MS = 3600000;
+  var lastAutoLoad = Date.now();
+  setInterval(function(){
+    if (document.visibilityState !== 'visible') return;
+    load();
+    lastAutoLoad = Date.now();
+  }, AUTOREFRESH_MS);
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && (Date.now() - lastAutoLoad) > AUTOREFRESH_MS){
+      load();
+      lastAutoLoad = Date.now();
+    }
+  });
 }
 
 function rafraichir(){ load(); }
