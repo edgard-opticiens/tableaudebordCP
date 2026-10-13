@@ -305,7 +305,11 @@ function openAddModal(){
 }
 function closeAddModal(){ document.getElementById('mdlAdd').classList.remove('show'); }
 document.getElementById('mdlAdd').addEventListener('click',function(e){ if(e.target===this) closeAddModal(); });
-function makeIdManuel(societe,nom,prenom,debut){ return societe+'_'+nom+'_'+prenom+'_'+debut; }
+// Le type (CP / Absence / CP+ABS) fait partie de la clé : sans lui, une saisie manuelle
+// Absence pour un collaborateur a une date donnee ecrasait silencieusement une saisie CP
+// deja existante pour ce meme collaborateur a la meme date de debut (meme defaut que sur
+// l'outil congés-payés en ligne, corrige le 2026-10-13 — meme webhook de log partagé).
+function makeIdManuel(societe,nom,prenom,debut,type){ return societe+'_'+nom+'_'+prenom+'_'+debut+'_'+(type||''); }
 function submitManualConge(){
   var err=document.getElementById('addErr');
   err.style.display='none'; err.textContent='';
@@ -328,7 +332,7 @@ function submitManualConge(){
     return;
   }
 
-  var id=makeIdManuel(societe,nom,prenom,debut);
+  var id=makeIdManuel(societe,nom,prenom,debut,type);
   var exists=DATA.concat(ARCHIVE).some(function(d){return d.id===id;});
   if(exists && !confirm('Une demande existe déjà pour '+prenom+' '+nom+' ('+societe+') à cette date de début. Continuer écrasera cette demande existante avec les nouvelles informations. Continuer ?')){
     return;
