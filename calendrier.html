@@ -262,6 +262,15 @@ function excelOrIsoDate(v){
   if(typeof v==='number'||/^\d+(\.\d+)?$/.test(v)){
     return new Date((Number(v)-25569)*86400000);
   }
+  // date_debut/date_fin sont ecrites au format francais JJ/MM/AAAA ; new Date(v)
+  // natif les lit en MM/JJ/AAAA (US) et inverse jour/mois silencieusement quand les
+  // deux sont <=12 (ou renvoie une date invalide sinon). On les parse explicitement
+  // avant de retomber sur le parsing generique (dates ISO comme date_derniere_action).
+  var mfr=String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(mfr){
+    var dfr=new Date(+mfr[3],+mfr[2]-1,+mfr[1]);
+    return isNaN(dfr)?null:dfr;
+  }
   var d=new Date(v);
   return isNaN(d)?null:d;
 }
