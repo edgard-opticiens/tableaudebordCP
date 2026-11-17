@@ -275,7 +275,12 @@ function fmtDate(d){
     // Numéro de série Excel (jours depuis 1899-12-30)
     dt=new Date((Number(d)-25569)*86400000);
   }else{
-    dt=new Date(d);
+    // date_debut/date_fin sont ecrites au format francais JJ/MM/AAAA ; new Date(v)
+    // natif les lit en MM/JJ/AAAA (US) et inverse jour/mois silencieusement quand les
+    // deux sont <=12 (ou renvoie une date invalide sinon). On les parse explicitement
+    // avant de retomber sur le parsing generique (dates ISO comme date_derniere_action).
+    var mfr=String(d).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    dt=mfr?new Date(+mfr[3],+mfr[2]-1,+mfr[1]):new Date(d);
   }
   if(isNaN(dt))return d;
   return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
